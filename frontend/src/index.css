@@ -1,0 +1,370 @@
+@import './assets/Inter/inter.css';
+@import 'frappe-ui/src/style.css';
+
+/* Native WebViews report their visible height dynamically as browser chrome
+ * opens and closes. `dvh` and safe-area insets keep LMS controls reachable in
+ * Capacitor as well as in mobile browsers. */
+html,
+body,
+#app {
+	min-height: 100%;
+	min-height: 100dvh;
+}
+
+body {
+	overflow-x: hidden;
+	-webkit-tap-highlight-color: transparent;
+}
+
+img,
+video,
+iframe,
+canvas,
+svg {
+	max-width: 100%;
+}
+
+input,
+select,
+textarea,
+button {
+	font: inherit;
+}
+
+@media (max-width: 767px) {
+	/* Prevent iOS zooming controls on focus. */
+	input,
+	select,
+	textarea {
+		font-size: 16px;
+	}
+
+	.ProseMirror,
+	.ProseMirror table,
+	.ce-block__content,
+	.codex-editor__redactor {
+		max-width: 100%;
+	}
+
+	.ProseMirror,
+	.ProseMirror table,
+	.table-responsive {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.ProseMirror iframe,
+	.ProseMirror video,
+	.ProseMirror img {
+		height: auto;
+		max-width: 100%;
+	}
+}
+
+/*
+ * Frappe's `bg-surface-white` is a literal light utility in some builds.
+ * When the LMS theme changes text tokens to light colours, page headers and
+ * cards can therefore become white-on-white. Keep the shared utility layer
+ * in sync with the explicit LMS dark-theme markers.
+ */
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+) {
+	color-scheme: dark;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.bg-surface-white {
+	background-color: #101214 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.bg-surface-menu-bar {
+	background-color: #171b20 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.bg-surface-gray-1,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.bg-surface-gray-2 {
+	background-color: #20252b !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.border,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.border-b,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.border-t,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.border-l,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.border-r {
+	border-color: #343b43 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.text-ink-gray-9,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.text-ink-gray-8 {
+	color: #f4f5f6 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.text-ink-gray-7,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.text-ink-gray-6,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+.text-ink-gray-5 {
+	color: #b7c0c9 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+input,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+select,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+textarea {
+	color: #f4f5f6;
+	border-color: #3a424c;
+	background-color: #171b20;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+input::placeholder,
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+)
+textarea::placeholder {
+	color: #98a3ae;
+}
+
+/* Remaining shared Frappe surfaces used by dialogs, selected rows and media
+ * controls. These need explicit dark values for older Frappe UI builds. */
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+) :is(.bg-surface-modal, .bg-surface-gray-3, .bg-surface-gray-4, .bg-surface-gray-5) {
+	background-color: #282e35 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+) .bg-surface-selected {
+	background-color: #263442 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+) :is(.text-ink-gray-1, .text-ink-gray-2, .text-ink-gray-3, .text-ink-gray-4) {
+	color: #d7dde3 !important;
+}
+
+:is(
+	html[data-theme='dark'],
+	html.dark,
+	body[data-theme='dark'],
+	body.dark,
+	#app[data-theme='dark'],
+	#app.dark,
+	.dark-theme,
+	.frappe-dark
+) :is(.border-outline-gray-2, .border-outline-gray-3, .border-outline-gray-4, .border-outline-gray-modals) {
+	border-color: #343b43 !important;
+}

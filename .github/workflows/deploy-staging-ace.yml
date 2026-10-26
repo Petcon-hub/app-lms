@@ -1,0 +1,153 @@
+name: Deploy staging-ace
+
+on:
+  push:
+    branches:
+      - Staging-PetconLMS
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, staging-vm]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pre-flight — verify expected data volumes exist
+        run: |
+          for vol in \
+            staging-ace-deploy_staging-ace-mariadb-data \
+            staging-ace-deploy_staging-ace-redis-cache-data \
+            staging-ace-deploy_staging-ace-redis-queue-data \
+            staging-ace-deploy_staging-ace-sites \
+            staging-ace-deploy_staging-ace-logs
+          do
+            if ! docker volume inspect "$vol" > /dev/null 2>&1; then
+              echo "::error::Expected volume '$vol' not found. Refusing to deploy."
+              exit 1
+            fi
+          done
+          echo "All expected data volumes confirmed present."
+
+      - name: Pre-flight — verify ports are free or already ours
+        run: |
+          for port in 8082 8083 8091; do
+            owner=$(docker ps --filter "publish=$port" --format '{{.Names}}')
+            if [ -n "$owner" ] && [[ "$owner" != staging-ace-* ]]; then
+              echo "::error::Port $port is held by unexpected container '$owner'. Refusing to deploy."
+              exit 1
+            fi
+          done
+          echo "Ports clear or already owned by this stack."
+
+      - name: Record current image tag for possible rollback
+        run: |
+          mkdir -p ~/.deploy-state
+          if [ -f ~/.deploy-state/staging-ace-last-good-sha ]; then
+            echo "Previous good SHA: $(cat ~/.deploy-state/staging-ace-last-good-sha)"
+          else
+            echo "No previous good SHA on record (first deploy via CI/CD)."
+          fi
+
+      - name: Build new image tagged with this commit
+        env:
+          apps_json: ${{ secrets.PETCON_LMS1_APPS_JSON }}
+        run: |
+          export IMAGE_TAG=${GITHUB_SHA}
+          docker compose -f docker-compose.staging.yml build --build-arg CACHE_BUST=${GITHUB_SHA}-$(date +%s)
+
+      - name: Deploy backend + workers (frontend untouched, old version still public)
+        env:
+          MARIADB_ROOT_PASSWORD: ${{ secrets.STAGING_ACE_MARIADB_ROOT_PASSWORD }}
+        run: |
+          export IMAGE_TAG=${GITHUB_SHA}
+          docker compose -f docker-compose.staging.yml up -d \
+            mariadb redis-cache redis-queue configurator migrate \
+            backend websocket queue-short queue-long scheduler
+
+      - name: Verify new backend BEFORE swapping public traffic
+        id: safety_checks
+        continue-on-error: true
+        run: |
+          set -e
+
+          echo "Waiting for migrate container to finish..."
+          for i in $(seq 1 30); do
+            status=$(docker inspect staging-ace-migrate --format '{{.State.Status}}')
+            if [ "$status" = "exited" ]; then
+              break
+            fi
+            echo "Migrate still running ($status)... waiting (${i}/30, 10s each)"
+            sleep 10
+          done
+          exit_code=$(docker inspect staging-ace-migrate --format '{{.State.ExitCode}}')
+          if [ "$exit_code" != "0" ]; then
+            echo "bench migrate failed (exit code $exit_code)."
+            docker logs staging-ace-migrate --tail 50
+            exit 1
+          fi
+          echo "Migration completed successfully."
+
+          set +e
+          ok=false
+          for i in 1 2 3 4 5 6; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: staging-ace.petconlms.com" http://localhost:8082)
+            if [ "$status" = "200" ] || [ "$status" = "302" ]; then
+              ok=true
+              break
+            fi
+            echo "Attempt $i: got HTTP '$status' from backend directly, retrying in 10s..."
+            sleep 10
+          done
+          set -e
+          if [ "$ok" != "true" ]; then
+            echo "New backend did not respond correctly after 6 attempts. Public site was NEVER exposed to this broken version."
+            docker logs staging-ace-backend --tail 50
+            exit 1
+          fi
+          echo "New backend confirmed healthy — safe to swap public traffic."
+
+          count=$(docker exec staging-ace-backend bench --site staging-ace.petconlms.com execute frappe.db.count --args "['LMS Course']")
+          if [ "$count" -lt 1 ]; then
+            echo "New backend is serving 0 LMS Course records — looks empty, not real data."
+            exit 1
+          fi
+          echo "Confirmed $count LMS Course records present on new backend."
+
+      - name: Record this deploy as last known good
+        if: steps.safety_checks.outcome == 'success'
+        run: |
+          echo "${GITHUB_SHA}" > ~/.deploy-state/staging-ace-last-good-sha
+          echo "Deploy succeeded and verified. Recorded as last-good-sha."
+
+      - name: Swap public traffic to verified new version
+        if: steps.safety_checks.outcome == 'success'
+        env:
+          MARIADB_ROOT_PASSWORD: ${{ secrets.STAGING_ACE_MARIADB_ROOT_PASSWORD }}
+        run: |
+          export IMAGE_TAG=${GITHUB_SHA}
+          docker compose -f docker-compose.staging.yml up -d frontend
+          sleep 5
+          status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: staging-ace.petconlms.com" http://localhost:8091)
+          if [ "$status" != "200" ]; then
+            echo "::error::Frontend swap completed but public site returned HTTP $status instead of 200."
+            exit 1
+          fi
+          echo "Public traffic successfully swapped to new version (HTTP 200 confirmed)."
+
+      - name: Roll back to last known good deploy
+        if: steps.safety_checks.outcome == 'failure'
+        env:
+          MARIADB_ROOT_PASSWORD: ${{ secrets.STAGING_ACE_MARIADB_ROOT_PASSWORD }}
+        run: |
+          if [ -f ~/.deploy-state/staging-ace-last-good-sha ]; then
+            LAST_GOOD=$(cat ~/.deploy-state/staging-ace-last-good-sha)
+            echo "::error::Deploy failed verification. Rolling back to previous good commit $LAST_GOOD."
+            export IMAGE_TAG=$LAST_GOOD
+            docker compose -f docker-compose.staging.yml up -d
+            sleep 10
+            status=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: staging-ace.petconlms.com" http://localhost:8091)
+            echo "Rollback complete. Site status after rollback: HTTP $status"
+          else
+            echo "::error::Deploy failed verification, and no previous good deploy exists to roll back to. Manual intervention required — check: docker ps -a | grep staging-ace"
+          fi
+          exit 1

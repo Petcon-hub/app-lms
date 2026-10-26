@@ -1,0 +1,200 @@
+x-app-build: &app-build
+  context: ./docker
+  dockerfile: Containerfile
+  args:
+    FRAPPE_PATH: https://github.com/frappe/frappe
+    FRAPPE_BRANCH: version-15
+    PYTHON_VERSION: "3.10"
+    NODE_VERSION: "18"
+  secrets:
+    - apps_json
+
+services:
+  mariadb:
+    image: mariadb:10.6.22
+    container_name: staging-ace-mariadb
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD}"
+    volumes:
+      - staging-ace-mariadb-data:/var/lib/mysql
+
+  redis-cache:
+    image: redis:6.0.16-alpine
+    container_name: staging-ace-redis-cache
+    restart: unless-stopped
+    volumes:
+      - staging-ace-redis-cache-data:/data
+
+  redis-queue:
+    image: redis:6.0.16-alpine
+    container_name: staging-ace-redis-queue
+    restart: unless-stopped
+    volumes:
+      - staging-ace-redis-queue-data:/data
+
+  configurator:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-configurator
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        bench set-config -g db_host mariadb;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache "redis://redis-cache:6379";
+        bench set-config -g redis_queue "redis://redis-queue:6379";
+        bench set-config -g redis_socketio "redis://redis-cache:6379";
+        bench set-config -gp socketio_port 9000;
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+
+  backend:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-backend
+    restart: unless-stopped
+    ports:
+      - "8082:8000"
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - configurator
+
+  migrate:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-migrate
+    restart: "no"
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - bench --site staging-ace.petconlms.com migrate && bench build --app lms && bench build --app petcon_theme
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - configurator
+
+  frontend:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-frontend
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+    command:
+      - 'export FRAPPE_SITE_NAME_HEADER="\$$host"; exec /usr/local/bin/nginx-entrypoint.sh'
+    environment:
+      - BACKEND=backend:8000
+      - SOCKETIO=websocket:9000
+      - UPSTREAM_REAL_IP_ADDRESS=127.0.0.1
+      - UPSTREAM_REAL_IP_HEADER=X-Forwarded-For
+      - UPSTREAM_REAL_IP_RECURSIVE=off
+      - PROXY_READ_TIMEOUT=120
+      - CLIENT_MAX_BODY_SIZE=2048m
+    ports:
+      - "8091:8080"
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - backend
+      - websocket
+
+  websocket:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-websocket
+    restart: unless-stopped
+    command:
+      - node
+      - /home/frappe/frappe-bench/apps/frappe/socketio.js
+    ports:
+      - "8083:9000"
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - configurator
+
+  queue-short:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-queue-short
+    restart: unless-stopped
+    command:
+      - bench
+      - worker
+      - --queue
+      - short,default
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - configurator
+
+  queue-long:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-queue-long
+    restart: unless-stopped
+    command:
+      - bench
+      - worker
+      - --queue
+      - long,default,short
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - configurator
+
+  scheduler:
+    build: *app-build
+    image: staging-ace:${IMAGE_TAG:-latest}
+    container_name: staging-ace-scheduler
+    restart: unless-stopped
+    command:
+      - bench
+      - schedule
+    volumes:
+      - staging-ace-sites:/home/frappe/frappe-bench/sites
+      - staging-ace-logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - configurator
+
+secrets:
+  apps_json:
+    environment: apps_json
+
+volumes:
+  staging-ace-mariadb-data:
+    external: true
+    name: staging-ace-deploy_staging-ace-mariadb-data
+  staging-ace-redis-cache-data:
+    external: true
+    name: staging-ace-deploy_staging-ace-redis-cache-data
+  staging-ace-redis-queue-data:
+    external: true
+    name: staging-ace-deploy_staging-ace-redis-queue-data
+  staging-ace-sites:
+    external: true
+    name: staging-ace-deploy_staging-ace-sites
+  staging-ace-logs:
+    external: true
+    name: staging-ace-deploy_staging-ace-logs

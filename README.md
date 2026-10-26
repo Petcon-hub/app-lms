@@ -1,2 +1,1 @@
-# app-lms
-for app
+- First github ci-cd action run and test. 
